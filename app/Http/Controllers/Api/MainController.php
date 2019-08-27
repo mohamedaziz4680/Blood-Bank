@@ -22,53 +22,49 @@ class MainController extends Controller
     {
         $governorates = Governorate::all();
 
-        return responseJson(1,'success',$governorates);
+        return responseJson(1, 'success', $governorates);
     }
 
     public function cities(Request $request)
     {
-        $cities = City::where(function($query) use($request){
-            if($request->has('governorate_id'))
-            {
+        $cities = City::where(function ($query) use ($request) {
+            if ($request->has('governorate_id')) {
                 $query->where('governorate_id', $request->governorate_id);
             }
         })->get();
 
-        return responseJson(1,'success',$cities);
+        return responseJson(1, 'success', $cities);
     }
 
     public function posts(Request $request)
     {
-        $posts = Post::where(function($query) use($request){
-            if($request->has('category_id') || $request->has('filter'))
-            {
-                $query->where('category_id',$request->category_id);
-                $query->where(function($query) use ($request){
-                    $query->where('title','like', '%'.$request->filter.'%')
-                    ->orwhere('content','like', '%'.$request->filter.'%');
+        $posts = Post::where(function ($query) use ($request) {
+            if ($request->has('category_id') || $request->has('filter')) {
+                $query->where('category_id', $request->category_id);
+                $query->where(function ($query) use ($request) {
+                    $query->where('title', 'like', '%'.$request->filter.'%')
+                    ->orwhere('content', 'like', '%'.$request->filter.'%');
                 });
-                
             }
         })->paginate(20);
-        return responseJson(1,'success',$posts);
+        return responseJson(1, 'success', $posts);
     }
 
     public function post(Request $request)
     {
         $post = Post::find($request->post_id);
 
-        return responseJson(1,'success',$post);
+        return responseJson(1, 'success', $post);
     }
 
     public function toggleFavorite(Request $request)
     {
         $client = $request->user();
-        if ($client) 
-        {
+        if ($client) {
             $client->posts()->toggle($request->post_id);
-            return responseJson(1,'success add to favorite');
+            return responseJson(1, 'success add to favorite');
         } else {
-            return responseJson(0,'failed add to favorite');
+            return responseJson(0, 'failed add to favorite');
         }
     }
 
@@ -78,7 +74,7 @@ class MainController extends Controller
 
         $favoritePosts = $client->posts()->paginate(20);
 
-        return responseJson(1,'favorite posts',$favoritePosts);
+        return responseJson(1, 'favorite posts', $favoritePosts);
     }
 
     public function donationRequestCreate(Request $request, Client $client)
@@ -93,29 +89,26 @@ class MainController extends Controller
             'phone_number' => 'required|digits:11'
         ]);
 
-        if($validation->fails()){
-            return responseJson(0,$validation->errors()->first(),$validation->errors());
+        if ($validation->fails()) {
+            return responseJson(0, $validation->errors()->first(), $validation->errors());
         }
 
         $donationRequest = $request->user()->donationRquests()->create($request->all());
-        $clientsIds = $donationRequest->city->governorate->clients()->wherehas('bloodtypes',function($query) use ($request){
+        $clientsIds = $donationRequest->city->governorate->clients()->wherehas('bloodtypes', function ($query) use ($request) {
             $query->where('blood_types.id', $request->blood_type_id);
         })->pluck('clients.id')->toArray();
 
-        if(count($clientsIds))
-        {
+        if (count($clientsIds)) {
             $notification = $donationRequest->notification()->create([
                 'title' => 'احتاج متبرع لفصيلة',
                 'content' => $request->user()->name.'محتاج متبرع لفصيلة',
             ]);
 
-            $notification->clients()->attach($clientsIds,['is_read' => false]);
+            $notification->clients()->attach($clientsIds, ['is_read' => false]);
 
             $tokens = Token::whereIn('client_id', $clientsIds)->where('token', '!=', null)->pluck('token')->toArray();
                 
-            if(count($tokens))
-            {
-
+            if (count($tokens)) {
                 $title = $notification->title;
                 $content = $notification->content;
                 $data = [
@@ -127,7 +120,7 @@ class MainController extends Controller
                     'donation_request_id' => $donationRequest->id
                 ];
 
-                $send = notifyByFireBase($title,$content,$tokens,$data);
+                $send = notifyByFireBase($title, $content, $tokens, $data);
             }
 
             return responseJson(1, 'success', $send);
@@ -138,25 +131,23 @@ class MainController extends Controller
 
     public function listDonationRequests(Request $request)
     {
-        $donationRequests = DonationRequest::where(function($query) use($request){
-            if($request->has('filter'))
-            {
-                $query->whereHas('city',function($query) use($request){
+        $donationRequests = DonationRequest::where(function ($query) use ($request) {
+            if ($request->has('filter')) {
+                $query->whereHas('city', function ($query) use ($request) {
                     $query->where('governorate_id', $request->governorate_id);
                 });
                 $query->where('blood_type_id', $request->blood_type_id);
-                
             }
         })->paginate(20);
 
-        return responseJson(1,'success', $donationRequests);
+        return responseJson(1, 'success', $donationRequests);
     }
 
     public function donationRequest(Request $request)
     {
         $donationRequest= DonationRequest::find($request->donation_request_id);
 
-        return responseJson(1,'success', $donationRequest);
+        return responseJson(1, 'success', $donationRequest);
     }
 
     public function updateNotificationSettings(Request $request)
@@ -169,17 +160,16 @@ class MainController extends Controller
             'action' => 'required|in:get,set'
         ]);
 
-        if($validation->fails()){
-            return responseJson(0,$validation->errors()->first(),$validation->errors());
+        if ($validation->fails()) {
+            return responseJson(0, $validation->errors()->first(), $validation->errors());
         }
 
-        if($request->action == 'set')
-        {
+        if ($request->action == 'set') {
             $request->user()->governorates()->sync($request->governorates);
             $request->user()->bloodtypes()->sync($request->blood_types);
         }
 
-        return responseJson(1,'succes to save setting',[
+        return responseJson(1, 'succes to save setting', [
             'governorates' => $request->user()->governorates()->pluck('governorates.id')->toArray(),
             'bloodtypes' => $request->user()->bloodtypes()->pluck('blood_types.id')->toArray(),
         ]);
@@ -188,24 +178,24 @@ class MainController extends Controller
     public function countUnReadNotification(Request $request)
     {
         $notifications = $request->user()->notifications()->where('is_read', false)->get();
-        if(count($notifications))
-        {
-            return responseJson(1,'success notification', $notifications);
+        $allUnReadNotification= count($notifications);
+        if ($allUnReadNotification) {
+            return responseJson(1, 'success notification', $allUnReadNotification);
         } else {
-            return responseJson(0,'failed to get notification');
+            return responseJson(0, 'failed to get notification');
         }
     }
 
     public function listNotification(Request $request)
     {
         $notifications= Notification::paginate(20);
-        return responseJson(1,'success',$notifications);
+        return responseJson(1, 'success', $notifications);
     }
 
     public function configs()
     {
         $configs = Configs::all();
-        return responseJson(1,'success', $configs);
+        return responseJson(1, 'success', $configs);
     }
 
     public function contactUs(Request $request)
@@ -218,11 +208,11 @@ class MainController extends Controller
             'message' => 'required'
         ]);
 
-        if($validation->fails()){
-            return responseJson(0,$validation->errors()->first(),$validation->errors());
+        if ($validation->fails()) {
+            return responseJson(0, $validation->errors()->first(), $validation->errors());
         }
 
         $contactUs = ContactUs::create($request->all());
-        return responseJson(1,'succes send',$contactUs);
+        return responseJson(1, 'succes send', $contactUs);
     }
 }
